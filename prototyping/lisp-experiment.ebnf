@@ -1,0 +1,148 @@
+(* assuming ? all characters ? ? tab ? ? whitespace ? which includes newlines and eol ? newline ? ? digit ? ? empty ? ? indent ? ? dedent ? ? hex digit ? ? bin digit ? ? oct digit ? *)
+(* the grammar here is case-insensitive *)
+
+(* basic definitions *)
+all characters = ? all characters ?;
+whitespace = ? whitespace ?;
+visible = ? all characters ? - whitespace;
+newline = ? newline ?;
+space = whitespace - newline; (* space or tab *)
+digit = ? digit ?;
+hex digit = ? hex digit ?;
+bin digit = ? bin digit ?;
+oct digit = ? oct digit ?;
+spaces = {whitespace | comment};
+spaces until newline = {space | comment};
+
+(* 
+	currently defined number types (not enforced in the grammar for future extensibility)
+	
+	signed number type = "i" | "i16" | "i32" | "i64" | "b";
+	unsigned number type = "u" | "u16" | "u32" | "u64" | "bu";
+	float number type = "f" | "d" | "f16" | "f32" | "f64";
+	
+	0b is 0 in binary or decimal so it's not a conflict
+*)
+number separator = "_";
+floating point = ".";
+sign = "+" | "-";
+fraction = "/";
+exponent = "e", sign, digit, {[number separator], digit}; (* case insensitive *)
+
+(* 1.0, 1.d, .1, 1/2 *)
+decimal number = digit, {[number separator], digit}, [floating point, {digit, [number separator]}, [exponent]]
+			   | floating point, digit, {digit, [number separator]}, [exponent];
+			   | decimal number, fraction, decimal number;
+binary number = "0b", bin digit, [number separator, bin digit];
+hex number = "0x", hex digit, {number separator, hex digit};
+octal number = "0o", oct digit, {number separator, oct digit};
+number suffix = identifier character - (floating point | fraction);
+number unit = floating point, number suffix, {number suffix};
+
+number = [sign], decimal number | binary number | hex number | octal number, {number suffix}, [number unit];
+
+string character = all characters - "\"
+	| "\\" | '\"' | "`" | "\/" | "\b" | "\f" | "\n" | "\r" | "\t" | "\ " | "\}" | "\]" | "\="
+	| "\x", hex digit, hex digit
+	| "\u", hex digit, hex digit, hex digit, hex digit
+	| "\u{", hex digit, {hex digit}, "}";
+string = '"', {string character - '"'], '"'
+       | "`", {string character - "`" - space};
+separator = ",";
+(*
+	using a "," creates a tuple if there was more than 1 element before it:
+	f a b c d : (f a b c d)
+	f a b, c d : (f (a b) (c d))
+	f(a, b) : (f a b)
+*)
+(* 
+	if [] is followed by an identifier character, it is parsed as an identifier instead of an array followed by a property
+	the other behavior can be forced by including at least one space: [ ]append! true is the same as ([] append! true)
+*)
+array = "[", {atom | separator | spaces}, "]";
+
+comment = ";", {all characters - newline}
+        | ";*", {all characters}, "*;";
+pragma character = string character - "}";
+(* trimmed at start and end *)
+pragma = "#{", pragma character, {pragma character}, "}#";
+
+identifier character = visible - ("{" | "}" | "(" | ")" | "\" | '"' | "`" | separator | ":" | "]");
+initial identifier character = identifier character - (digit | "[" | "-" | ">");
+(*
+   identifiers cannot lead with a digit
+   < cannot follow anything but < or > in order to not conflict with the shorthand type identifier
+*)
+(* this rule exists to allow type shorthands to parse *)
+subsequent identifier character = identifier character - ("<" | ">") | ("<", ("<" | ">"));
+(* ordered by priority *)
+identifier sequence = "[", [expression], "]"
+					| ("~" | "." | "/" | "|"), subsequent identifier character
+					| subsequent identifier character;
+
+(* forbid -> (block) *)
+(* [, [], []= are ok, [a is not. *)
+identifier = initial identifier character, {identifier sequence}
+		   | "[", ["]", {identifier sequence}]
+		   | "|", {"|"}, {identifier sequence}
+		   | "-", [identifier sequence - ">", {identifier sequence}];
+(* function, value, reference, spread, symbol, type symbol, generic type, this, this static *)
+property sigil = "#" | "." | "&" | "..." | ":" | "::" | "'" | "\" | "\\";
+(* recursive for generics like name<array<'t>> *)
+type identifier = identifier, [type shorthand];
+type shorthand = "<", spaces, type identifier, {spaces, [separator], spaces, type identifier}, spaces, ">";
+type specifier = [type shorthand], ":", spaces, ((property, "{", {expression}, "}") | atom | sexpr)
+			     | type shorthand;
+property tag character = string character - "]";
+(* trimmed at start and end *)
+single property tag = "[", property tag character - "=", {property tag character}, "]";
+property tag = "#[", {single property tag | spaces}, "]";
+(*
+	a property may only have a sigil, in which case that becomes its name.
+	in the case of an identifier that starts with "." or "&" with a property sigil that is equivalent, the identifier becomes ".." or "&&" (and ..=, &&=, etc.)
+*)
+property = [property tag], [property sigil], identifier, [type specifier]
+		 | property sigil;
+identity = identifier | property sigil;
+block input = "||"
+			| "|", spaces, property, {spaces, [separator, spaces], property}, spaces, "|";
+block preface = "->", ["(", spaces, identity, spaces, ")"], [space, block input];
+(* parsing priority in order *)
+block = "->", identity,
+	  | block preface, spaces until newline, indented block
+	  | [block preface, spaces], "{", spaces, {expressions}, spaces, "}"
+	  | "->)", space, spaces until newline, expression, {expression};
+(*
+	? indent ? and ? dedent ? are the contextful parts of this grammar and therefore don't suit EBNF.
+
+	? indent ? is a newline followed by two spaces (tabs count for 2 spaces), with further spaces swallowed (with tabs again being counted as two spaces).
+	The number of spaces consumed is then stored in a stack and the source code's indent level is incremented. A block is created containing subsequent expressions, comments, and pragmas.
+	Subsequent code with the same space count (+- 1) is considered to be inside that block. Code with two spaces or more creates another indented block.
+	? dedent ? is either EOL or a newline followed by a decrease of at least two spaces + the number of additional spaces swallowed by the previous stage.
+	The indent level is decreased by one for each decrease in indent.
+	For example, if the indent stack was [2, 2, 3] and this line contains less than less than 6 spaces (7 +- 1), the indent level is dropped from 3 to 2 in case of 4 +- 1 spaces, to 1 in case of 2 +- 1 spaces, and to 0 in case of 0 +- 1 spaces.
+	a
+		b
+			c
+	d
+	d closes 'b' and 'a'
+
+	Only code at the root level (program) and inside other indented blocks is whitespace-sensitive. Code inside S-Exprs does not care about indent.
+*)
+indented block = {space | comment}, ? indent ?, {program}, ? dedent ?;
+
+atom = number | string | array | property;
+(* property, sexpr has priority over lone atom *)
+sexpr = "(", {expression | spaces}, ")"
+	  | property, sexpr;
+(* an indented block must follow an atom and cannot directly follow a separator and is not available inside (...) *)
+expression = atom, {space, spaces until newline, {expression}}, [separator, spaces, {expression}]
+		   | sexpr
+		   | block;
+indented expression = atom, {space, spaces until newline, {expression}}, [(separator, spaces, {expression}) | indented block]
+					| sexpr
+					| block;
+(* pragma must be parsed before expression because #{ should not be parsed as (property '#', block) *)
+expressions = {pragma | expression | spaces};
+(* indented expression must be parsed before spaces (they potentially read a newline) *)
+program = {pragma | indented expression | spaces};

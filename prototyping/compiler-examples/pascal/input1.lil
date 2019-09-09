@@ -1,0 +1,28 @@
+import print from io
+
+fn pascal-triangle n: int {
+    guard n > 0
+    println 1
+    guard n !== 1
+
+    rows = list<int> 1 size: ((n + 1) / 2)
+
+    row = 1
+    middle = 1
+    while row < n
+        even = (row & 1 == 0)
+        if even
+            rows[middle + 1] = rows[middle] * 2
+        for i = middle, i > 0, -- i
+            rows[i] += rows[i - 1]
+        for i = 0, i <= middle, ++ i
+            print rows[i] " "
+        if even
+            ++ middle
+        for i = middle, i >= 0, -- i
+            print rows[i] " "
+        println
+        ++ row
+}
+
+pascal-triangle 4

@@ -1,0 +1,1 @@
+For the bootstrapping compiler, tests will be more like integration tests rather than unit tests. Input .lil files for which the compiler will generate the appropriate .c, and inspect them.

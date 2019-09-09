@@ -1,0 +1,15 @@
+{
+  "name": "lilaclang",
+  "version": "0.0.1",
+  "description": "Bootstrapping compiler for Lilac.",
+  "author": "Tycho Kaster",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^10.3.1"
+  }
+}

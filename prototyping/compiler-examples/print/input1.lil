@@ -1,0 +1,3 @@
+(print `String)
+println `newlined
+puts `another-string

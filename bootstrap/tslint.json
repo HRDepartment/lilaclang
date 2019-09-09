@@ -1,0 +1,35 @@
+{
+    "defaultSeverity": "error",
+    "extends": [
+        "tslint:recommended"
+    ],
+    "jsRules": {},
+    "rules": {
+        "member-access": [true, "no-public"],
+        "max-classes-per-file": false,
+        "quotemark": false,
+        "interface-name": false,
+        "curly": [true, "ignore-same-line"],
+        "arrow-parens": false,
+        "trailing-comma": false,
+        "no-conditional-assignment": false,
+        "member-ordering": [
+            true,
+            {
+              "order": [
+                "public-instance-field",
+                "private-instance-field",
+                "public-constructor",
+                "private-constructor",
+                "public-instance-method",
+                "protected-instance-method",
+                "private-instance-method",
+                "public-static-field",
+                "private-static-field"
+              ]
+            }
+        ],
+        "ordered-imports": false
+    },
+    "rulesDirectory": []
+}
