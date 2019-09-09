@@ -1,3 +1,16 @@
+Lilac
+-----
+
+What if I could write Python, Ruby, C, and Lisp at the same time? Following the trend of code formatters, Lilac can resemble many different types of programming languages. The end user can format it in accordance to their wishes.
+
+Similar to Lisp, the core language is built on top of some simple control flow functions. Exception handling, classes, and other advanced concepts can all be built in userland, by allowing functions to modify the control flow and introduce new variables into scope (although they must be 'imported' and typed, thus not breaking static analysis tools). Strong typing is optionally supported.
+
+Functions having direct access to their caller's stack allow `if` and `else` to be functions like any other. A half dozen function types enable operators to be functions as well. DSLs and new languages can be created on the go by allowing literal text (such as '=>') as part of the function overload signature. It's Lisp on steroids, with s-exprs being implicit (you can write code more like Ruby instead, or you can use C-style braces and commas whenever you like). And it compiles to machine code by leveraging C as a 'transpiler' (like Nim). Ergonomics is key, and your imagination is endless.
+
+Check out prototyping/ for some of the language ideas behind Lilac as well as its EBNF-ish grammar (unfortunately, it's not really context-free due to supporting whitespace indentation).
+
+bootstrap/ (Bootstrapping compiler) contains a mostly finished AST parser.
+
 Inspirations:
     Python, Ruby, Crystal, Nim, TypeScript, Common Lisp,
     Scheme, Smalltalk, Perl, Swift
